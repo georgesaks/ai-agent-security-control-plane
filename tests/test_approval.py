@@ -8,6 +8,7 @@ from risk.adaptive_risk import reset_risk
 
 class ApprovalTests(unittest.TestCase):
     actor = "approval-test-agent"
+    reviewer = "security-reviewer-saki"
 
     def setUp(self):
         clear_approvals()
@@ -36,7 +37,7 @@ class ApprovalTests(unittest.TestCase):
         arguments = {"title": "x", "body": "y"}
         pending = self._request(arguments)
         request_id = pending.output.split("request_id=", 1)[1]
-        review_approval(request_id, reviewer="security-reviewer", approve=True)
+        review_approval(request_id, reviewer=self.reviewer, approve=True)
         context = MCPRequestContext(self.actor, "developer", "development", request_id)
         result = dispatch_tool("create_issue_draft", arguments, context, {"create_issue_draft": lambda **kwargs: "executed"})
         self.assertTrue(result.allowed)
@@ -48,7 +49,7 @@ class ApprovalTests(unittest.TestCase):
         original = {"title": "approved", "body": "safe"}
         pending = self._request(original)
         request_id = pending.output.split("request_id=", 1)[1]
-        review_approval(request_id, reviewer="security-reviewer", approve=True)
+        review_approval(request_id, reviewer=self.reviewer, approve=True)
         changed = {"title": "changed", "body": "different action"}
         context = MCPRequestContext(self.actor, "developer", "development", request_id)
         result = dispatch_tool("create_issue_draft", changed, context, {"create_issue_draft": lambda **kwargs: "executed"})
