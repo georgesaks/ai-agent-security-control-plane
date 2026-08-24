@@ -30,7 +30,8 @@ class ApprovalTests(unittest.TestCase):
     def test_sensitive_action_requires_approval(self):
         result = self._request({"title": "x", "body": "y"})
         self.assertFalse(result.allowed)
-        self.assertIn("human approval required", result.output)
+        self.assertIn("sensitive action", result.output)
+        self.assertIn("human approval", result.output)
         self.assertIn('"decision": "REQUIRE_APPROVAL"', result.audit_json)
 
     def test_approved_matching_action_executes_once(self):
