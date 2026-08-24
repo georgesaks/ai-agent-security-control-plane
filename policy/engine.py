@@ -25,6 +25,7 @@ ROLE_PERMISSIONS = {
     "developer": {
         "read_repository_summary",
         "create_issue_draft",
+        "critical_configuration_change",
     },
     "auditor": {
         "read_repository_summary",
