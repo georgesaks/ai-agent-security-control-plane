@@ -34,7 +34,8 @@ class GatewayDualApprovalTests(unittest.TestCase):
     def test_gateway_requires_dual_approval_before_execution(self):
         result = self._initial()
         self.assertFalse(result.allowed)
-        self.assertIn("two distinct authorized reviewers required", result.output)
+        self.assertIn("critical action", result.output)
+        self.assertIn("two distinct authorized reviewers", result.output)
         self.assertIn('"decision": "REQUIRE_DUAL_APPROVAL"', result.audit_json)
 
     def test_gateway_denies_after_only_one_approval(self):
