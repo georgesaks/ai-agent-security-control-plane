@@ -16,6 +16,7 @@ class ApprovalNegativePathTests(unittest.TestCase):
     environment = "development"
     tool = "create_issue_draft"
     arguments = {"title": "approved", "body": "reviewed"}
+    reviewer = "security-reviewer-saki"
 
     def tearDown(self) -> None:
         clear_approvals()
@@ -34,7 +35,7 @@ class ApprovalNegativePathTests(unittest.TestCase):
             actor=self.actor, role=self.role, environment=self.environment,
             tool_name=self.tool, arguments=self.arguments,
         )
-        review_approval(request.request_id, reviewer="reviewer", approve=False)
+        review_approval(request.request_id, reviewer=self.reviewer, approve=False)
         allowed, reason = consume_approval(
             request.request_id, actor=self.actor, role=self.role,
             environment=self.environment, tool_name=self.tool,
@@ -48,7 +49,7 @@ class ApprovalNegativePathTests(unittest.TestCase):
             actor=self.actor, role=self.role, environment=self.environment,
             tool_name=self.tool, arguments=self.arguments,
         )
-        review_approval(request.request_id, reviewer="reviewer", approve=True)
+        review_approval(request.request_id, reviewer=self.reviewer, approve=True)
         allowed, reason = consume_approval(
             request.request_id, actor=self.actor, role=self.role,
             environment=self.environment, tool_name=self.tool,
@@ -62,7 +63,7 @@ class ApprovalNegativePathTests(unittest.TestCase):
             actor=self.actor, role=self.role, environment=self.environment,
             tool_name=self.tool, arguments=self.arguments,
         )
-        review_approval(request.request_id, reviewer="reviewer", approve=True)
+        review_approval(request.request_id, reviewer=self.reviewer, approve=True)
         first, _ = consume_approval(
             request.request_id, actor=self.actor, role=self.role,
             environment=self.environment, tool_name=self.tool,
