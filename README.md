@@ -19,6 +19,8 @@ The project is being built incrementally. Each control is implemented, attacked,
 - Detect and correlate suspicious agent behavior
 - Contain compromised agents independently of the model
 - Adapt authorization based on runtime behavioral risk
+- Require explicit human authorization for selected sensitive operations
+- Prevent approval reuse and bind authorization to the reviewed action
 
 ## Architecture So Far
 
@@ -36,6 +38,11 @@ MCP Security Gateway
       +--> Adaptive Risk
       |
       +--> Authorization Policy
+      |
+      +--> Human Approval Boundary
+      |         |
+      |         +--> APPROVE / REJECT
+      |         +--> Action-bound, single-use approval
       |
       v
 Approved Tool Registry
@@ -92,7 +99,7 @@ Validated milestones:
 - Adaptive behavioral risk scoring from LOW to MEDIUM to HIGH to CRITICAL
 - Risk-based restriction of write capabilities at HIGH risk
 - Automatic quarantine and access revocation at CRITICAL risk
-- 28 automated security tests passing across identity, policy, gateway, telemetry, detection, containment, and adaptive-risk controls
+- 28 automated security tests passing at the adaptive-risk milestone
 
 Current control loop:
 
@@ -100,9 +107,50 @@ Current control loop:
 Prevent -> Observe -> Detect -> Correlate -> Contain -> Adapt -> Audit
 ```
 
-### Phase 3: Approval workflows and stronger enterprise controls — PLANNED
+### Phase 3: Human approval and stronger enterprise controls — ACTIVE
 
-The next phase will explore controls for sensitive operations that should not be fully autonomous, including human approval boundaries and additional enterprise policy enforcement. Phase 3 capabilities will be documented here only after they are implemented and validated.
+Introduced a human-in-the-loop authorization boundary for sensitive AI-agent operations that should not execute autonomously.
+
+Validated milestones:
+
+- New `REQUIRE_APPROVAL` authorization outcome for sensitive actions
+- Sensitive `create_issue_draft` request held before tool execution
+- Explicit human reviewer approval required before execution
+- Approval bound to actor, role, environment, tool, and exact action arguments
+- SHA-256 digest used to bind approval to the reviewed arguments
+- Approved action executed only after the gateway validates the approval
+- Approval consumed after successful use
+- Replay of the consumed approval denied
+- Audit telemetry records `REQUIRE_APPROVAL` and post-approval `ALLOW` decisions
+- Demonstration uses a local issue draft and performs no GitHub write
+- Regression suite increased to 31 passing automated security tests
+
+Validated approval flow:
+
+```text
+Agent requests sensitive action
+            |
+            v
+     Security Gateway
+            |
+            v
+     REQUIRE_APPROVAL
+            |
+            v
+       Human Review
+        /        \
+    REJECT      APPROVE
+      |            |
+     DENY          v
+              Execute exact
+             approved action
+                  |
+                  v
+           Consume approval
+                  |
+                  v
+          Replay attempt -> DENY
+```
 
 ## Experiments and Evidence
 
@@ -117,14 +165,20 @@ Evidence captured so far includes:
 5. Repeated malicious behavior correlated into a critical detection
 6. Automated quarantine with post-containment access denial
 7. Adaptive risk progression causing dynamic restriction and quarantine
-8. Regression suite reaching 28 passing security tests
+8. Regression suite reaching 28 passing security tests at the adaptive-risk milestone
+9. Sensitive agent action intercepted with `REQUIRE_APPROVAL`
+10. Human reviewer approval allowing only the reviewed action
+11. Consumed approval replay attempt denied
+12. Regression suite reaching 31 passing security tests after approval controls
 
 Sensitive information such as API keys, signing secrets, payment information, and account identifiers is intentionally excluded from project evidence.
 
 ## Current Learning
 
-A recurring design principle from the experiments so far is that model behavior alone is not a sufficient security boundary. Prompt-injection resistance is useful, but authorization, identity verification, telemetry, detection, and containment need to exist outside the model so that a manipulated or compromised agent cannot directly convert intent into privileged action.
+A recurring design principle from the experiments so far is that model behavior alone is not a sufficient security boundary. Prompt-injection resistance is useful, but authorization, identity verification, telemetry, detection, containment, adaptive risk, and approval controls need to exist outside the model so that a manipulated or compromised agent cannot directly convert intent into privileged action.
+
+The approval experiment adds another principle: human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action that was reviewed and consumed after execution to reduce confused-deputy and replay risk.
 
 ## Next Milestone
 
-Introduce a human-in-the-loop authorization state for sensitive operations so the control plane can distinguish among actions that can be automatically allowed, automatically denied, or held for explicit approval.
+Strengthen the approval boundary with negative-path testing, including rejected approvals, modified-action attempts, and attempts to execute without an approval, before adding the next enterprise control.
