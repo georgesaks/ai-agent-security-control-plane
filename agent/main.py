@@ -1,7 +1,8 @@
-"""Agent prototype with independent authorization and audit telemetry."""
+"""Agent prototype with externalized authorization and audit telemetry."""
 
 from agent.tools import list_available_tools
 from policy.engine import PolicyContext, evaluate
+from policy.opa_client import evaluate_with_opa
 from telemetry.audit import build_audit_event
 
 
@@ -11,6 +12,7 @@ def run_tool(
     actor: str = "local-user",
     role: str = "developer",
     environment: str = "development",
+    policy_backend: str = "python",
 ) -> str:
     tools = list_available_tools()
 
@@ -31,7 +33,16 @@ def run_tool(
         environment=environment,
         tool_name=tool_name,
     )
-    decision = evaluate(context)
+
+    if policy_backend == "opa":
+        decision = evaluate_with_opa(context)
+    elif policy_backend == "python":
+        decision = evaluate(context)
+    else:
+        decision = type(evaluate(context))(
+            allowed=False,
+            reason=f"unknown policy backend '{policy_backend}'; failing closed",
+        )
 
     event = build_audit_event(
         actor=actor,
@@ -51,26 +62,32 @@ def run_tool(
         f"ACTOR: {actor}\n"
         f"ROLE: {role}\n"
         f"ENVIRONMENT: {environment}\n"
+        f"POLICY BACKEND: {policy_backend}\n"
         f"RESULT: {tool.handler()}\n"
         f"AUDIT: {event.to_json()}"
     )
 
 
 def main() -> None:
-    print("AI Agent Security Control Plane - Prototype 3")
+    print("AI Agent Security Control Plane - Prototype 4")
+    print("Start OPA with: docker compose up opa")
 
-    print("\nTest 1: developer reads repository in development")
-    print(run_tool("read_repository_summary", actor="agent-001"))
+    print("\nOPA test: developer reads repository in development")
+    print(
+        run_tool(
+            "read_repository_summary",
+            actor="agent-001",
+            policy_backend="opa",
+        )
+    )
 
-    print("\nTest 2: auditor attempts issue draft")
-    print(run_tool("create_issue_draft", actor="agent-002", role="auditor"))
-
-    print("\nTest 3: developer attempts issue draft in production")
+    print("\nOPA test: developer attempts issue draft in production")
     print(
         run_tool(
             "create_issue_draft",
             actor="agent-003",
             environment="production",
+            policy_backend="opa",
         )
     )
 
