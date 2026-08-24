@@ -22,6 +22,8 @@ The project is being built incrementally. Each control is implemented, attacked,
 - Require explicit human authorization for selected sensitive operations
 - Prevent approval reuse and bind authorization to the reviewed action
 - Expire stale approvals so authorization is time-bounded
+- Restrict sensitive approvals to authorized reviewer identities
+- Enforce separation of duties between requester and approver
 
 ## Architecture So Far
 
@@ -43,6 +45,8 @@ MCP Security Gateway
       +--> Human Approval Boundary
       |         |
       |         +--> APPROVE / REJECT
+      |         +--> Authorized reviewer check
+      |         +--> Requester != reviewer
       |         +--> Action-bound approval
       |         +--> Single-use consumption
       |         +--> Time-bounded expiration
@@ -137,7 +141,12 @@ Validated milestones:
 - Approved but stale requests are denied after expiration
 - Expired approval retries remain denied
 - Pending approval requests cannot be approved after expiration
-- Regression suite increased to 39 passing automated security tests
+- Sensitive approvals restricted to an explicit authorized-reviewer set
+- Unauthorized and fabricated reviewers are denied
+- Requesters cannot approve their own sensitive actions
+- Failed unauthorized review attempts do not destroy legitimate pending requests
+- Authorized security reviewer can approve and execute the exact reviewed action
+- Regression suite increased to 44 passing automated security tests
 
 Validated approval flow:
 
@@ -151,22 +160,28 @@ Agent requests sensitive action
      REQUIRE_APPROVAL
             |
             v
-       Human Review
-        /        \
-    REJECT      APPROVE
-      |            |
-     DENY          v
-              Exact action
-              + valid TTL
-                  |
-                  v
-                ALLOW
-                  |
-                  v
-           Consume approval
-                  |
-                  +--> Replay -> DENY
-                  +--> Expired -> DENY
+      Reviewer identity
+            |
+      Authorized reviewer?
+        /          \
+      NO            YES
+      |              |
+     DENY      Requester != reviewer?
+                    /      \
+                  NO        YES
+                  |          |
+                 DENY        v
+                        Exact action
+                        + valid TTL
+                            |
+                            v
+                          ALLOW
+                            |
+                            v
+                     Consume approval
+                            |
+                            +--> Replay -> DENY
+                            +--> Expired -> DENY
 ```
 
 Approval attack validation:
@@ -181,6 +196,10 @@ Fresh approval inside TTL     -> ALLOW
 Stale approval after TTL      -> DENY
 Expired approval retry        -> DENY
 Late human review             -> DENY
+Unauthorized reviewer         -> DENY
+Fabricated reviewer           -> DENY
+Self approval                 -> DENY
+Authorized security reviewer  -> ALLOW
 ```
 
 ## Experiments and Evidence
@@ -208,6 +227,10 @@ Evidence captured so far includes:
 17. Stale approval denied after 301 seconds with an explicit expiration reason
 18. Expired approval retry and late human review both denied
 19. Regression suite reaching 39 passing security tests after approval-expiration controls
+20. Reviewer authorization attack suite blocks unauthorized and fabricated reviewers
+21. Separation-of-duties test blocks requester self-approval
+22. Authorized security reviewer successfully approves the reviewed action
+23. Regression suite reaches 44 passing security tests after reviewer-authorization controls
 
 Sensitive information such as API keys, signing secrets, payment information, and account identifiers is intentionally excluded from project evidence.
 
@@ -215,8 +238,8 @@ Sensitive information such as API keys, signing secrets, payment information, an
 
 A recurring design principle from the experiments so far is that model behavior alone is not a sufficient security boundary. Prompt-injection resistance is useful, but authorization, identity verification, telemetry, detection, containment, adaptive risk, and approval controls need to exist outside the model so that a manipulated or compromised agent cannot directly convert intent into privileged action.
 
-The approval experiments add another principle: human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action that was reviewed, consumed after execution, and limited in time. The negative-path and expiration tests demonstrate that the control fails closed when an approval is absent, rejected, altered, replayed, or stale.
+The approval experiments add another principle: human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action that was reviewed, consumed after execution, limited in time, and granted only by an authorized reviewer who is independent of the requester. The negative-path, expiration, and reviewer-authorization tests demonstrate that the control fails closed when an approval is absent, rejected, altered, replayed, stale, self-approved, or issued by an unauthorized reviewer.
 
 ## Next Milestone
 
-Add stronger reviewer controls so sensitive actions can require an authorized reviewer identity and, for higher-impact operations, support separation of duties such as dual approval before execution.
+Introduce dual approval for the highest-impact actions so execution requires two distinct authorized reviewers, then attack that control with duplicate-reviewer, partial-approval, replay, and mixed-authority scenarios before moving to broader enterprise policy integration.
