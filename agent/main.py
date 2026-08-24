@@ -5,7 +5,7 @@ step isolates the basic security boundary: a request can only invoke a tool
 that has explicitly been exposed to the agent.
 """
 
-from tools import list_available_tools
+from agent.tools import list_available_tools
 
 
 def run_tool(tool_name: str) -> str:
