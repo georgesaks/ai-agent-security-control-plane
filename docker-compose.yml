@@ -1,0 +1,12 @@
+services:
+  opa:
+    image: openpolicyagent/opa:latest
+    command:
+      - run
+      - --server
+      - --log-level=info
+      - /policies/agent_authorization.rego
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./policy:/policies:ro
