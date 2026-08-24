@@ -24,6 +24,8 @@ The project is being built incrementally. Each control is implemented, attacked,
 - Expire stale approvals so authorization is time-bounded
 - Restrict sensitive approvals to authorized reviewer identities
 - Enforce separation of duties between requester and approver
+- Require two distinct authorized reviewers for highest-impact actions
+- Enforce four-eyes authorization at the MCP gateway before critical tool execution
 
 ## Architecture So Far
 
@@ -44,9 +46,9 @@ MCP Security Gateway
       |
       +--> Human Approval Boundary
       |         |
-      |         +--> APPROVE / REJECT
-      |         +--> Authorized reviewer check
-      |         +--> Requester != reviewer
+      |         +--> Sensitive action: single authorized reviewer
+      |         +--> Critical action: two distinct authorized reviewers
+      |         +--> Requester != reviewer(s)
       |         +--> Action-bound approval
       |         +--> Single-use consumption
       |         +--> Time-bounded expiration
@@ -116,7 +118,7 @@ Prevent -> Observe -> Detect -> Correlate -> Contain -> Adapt -> Audit
 
 ### Phase 3: Human approval and stronger enterprise controls — ACTIVE
 
-Introduced a human-in-the-loop authorization boundary for sensitive AI-agent operations that should not execute autonomously.
+Introduced human-in-the-loop authorization boundaries for sensitive and critical AI-agent operations that should not execute autonomously.
 
 Validated milestones:
 
@@ -146,60 +148,85 @@ Validated milestones:
 - Requesters cannot approve their own sensitive actions
 - Failed unauthorized review attempts do not destroy legitimate pending requests
 - Authorized security reviewer can approve and execute the exact reviewed action
-- Regression suite increased to 44 passing automated security tests
+- Dual-control approval primitive introduced for highest-impact actions
+- One reviewer is insufficient for critical action execution
+- Same reviewer cannot satisfy both approval slots
+- Unauthorized second reviewer is denied
+- Requester cannot participate as a reviewer for its own critical action
+- Critical approval remains bound to the exact action and is time-bounded and single-use
+- Two distinct authorized reviewers successfully satisfy four-eyes authorization
+- `critical_configuration_change` classified as an authorized developer capability subject to critical controls
+- MCP gateway now returns `REQUIRE_DUAL_APPROVAL` before critical execution
+- MCP gateway denies critical execution after only one approval
+- MCP gateway executes the exact critical action only after two distinct authorized approvals
+- MCP gateway denies post-approval argument tampering
+- MCP gateway denies replay after successful critical execution
+- Regression suite increased to 57 passing automated security tests
 
 Validated approval flow:
 
 ```text
-Agent requests sensitive action
-            |
-            v
-     Security Gateway
-            |
-            v
-     REQUIRE_APPROVAL
-            |
-            v
-      Reviewer identity
-            |
-      Authorized reviewer?
-        /          \
-      NO            YES
-      |              |
-     DENY      Requester != reviewer?
-                    /      \
-                  NO        YES
-                  |          |
-                 DENY        v
-                        Exact action
-                        + valid TTL
-                            |
-                            v
-                          ALLOW
-                            |
-                            v
-                     Consume approval
-                            |
-                            +--> Replay -> DENY
-                            +--> Expired -> DENY
+Sensitive action
+      |
+      v
+REQUIRE_APPROVAL
+      |
+Authorized independent reviewer
+      |
+Exact action + valid TTL + unused
+      |
+      v
+    ALLOW
+
+Critical action
+      |
+      v
+MCP Security Gateway
+      |
+      v
+REQUIRE_DUAL_APPROVAL
+      |
+      +--> Reviewer A authorized and independent?
+      |
+      +--> Reviewer B authorized and independent?
+      |
+      +--> Reviewer A != Reviewer B?
+      |
+      +--> Exact action match?
+      |
+      +--> Approval still fresh and unused?
+      |
+      v
+    EXECUTE
+      |
+      v
+Consume authorization
+      |
+      +--> Replay -> DENY
 ```
 
 Approval attack validation:
 
 ```text
-No valid approval             -> DENY
-Human rejects                 -> DENY
-Approved action is modified   -> DENY
-Exact reviewed action         -> ALLOW
-Consumed approval is replayed -> DENY
-Fresh approval inside TTL     -> ALLOW
-Stale approval after TTL      -> DENY
-Expired approval retry        -> DENY
-Late human review             -> DENY
-Unauthorized reviewer         -> DENY
-Fabricated reviewer           -> DENY
-Self approval                 -> DENY
-Authorized security reviewer  -> ALLOW
+No valid approval                  -> DENY
+Human rejects                      -> DENY
+Approved action is modified        -> DENY
+Exact reviewed action              -> ALLOW
+Consumed approval is replayed      -> DENY
+Fresh approval inside TTL          -> ALLOW
+Stale approval after TTL           -> DENY
+Expired approval retry             -> DENY
+Late human review                  -> DENY
+Unauthorized reviewer              -> DENY
+Fabricated reviewer                -> DENY
+Self approval                      -> DENY
+Authorized security reviewer       -> ALLOW
+One critical reviewer only         -> DENY
+Same critical reviewer twice       -> DENY
+Unauthorized second reviewer       -> DENY
+Critical action tampering          -> DENY
+Two authorized critical reviewers  -> ALLOW
+Critical execution replay          -> DENY
 ```
 
 ## Experiments and Evidence
@@ -231,6 +258,13 @@ Evidence captured so far includes:
 21. Separation-of-duties test blocks requester self-approval
 22. Authorized security reviewer successfully approves the reviewed action
 23. Regression suite reaches 44 passing security tests after reviewer-authorization controls
+24. Dual-approval attack suite validates one-reviewer, duplicate-reviewer, unauthorized-reviewer, tampering, and replay denial paths
+25. Two distinct authorized reviewers satisfy the isolated four-eyes approval primitive
+26. Regression suite reaches 52 passing tests after dual-approval primitive validation
+27. Critical action integrated into the real MCP security gateway with `REQUIRE_DUAL_APPROVAL`
+28. Gateway blocks execution with only one reviewer and after action tampering
+29. Gateway executes only after two distinct authorized reviewers and consumes the authorization
+30. Regression suite reaches 57 passing tests after four-eyes gateway integration
 
 Sensitive information such as API keys, signing secrets, payment information, and account identifiers is intentionally excluded from project evidence.
 
@@ -238,8 +272,8 @@ Sensitive information such as API keys, signing secrets, payment information, an
 
 A recurring design principle from the experiments so far is that model behavior alone is not a sufficient security boundary. Prompt-injection resistance is useful, but authorization, identity verification, telemetry, detection, containment, adaptive risk, and approval controls need to exist outside the model so that a manipulated or compromised agent cannot directly convert intent into privileged action.
 
-The approval experiments add another principle: human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action that was reviewed, consumed after execution, limited in time, and granted only by an authorized reviewer who is independent of the requester. The negative-path, expiration, and reviewer-authorization tests demonstrate that the control fails closed when an approval is absent, rejected, altered, replayed, stale, self-approved, or issued by an unauthorized reviewer.
+The approval experiments add another principle: human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action that was reviewed, consumed after execution, limited in time, and granted only by authorized reviewers who are independent of the requester. For critical operations, the gateway now requires two distinct authorized reviewers before the tool handler is reachable. The negative-path, expiration, reviewer-authorization, dual-control, and gateway-integration tests demonstrate fail-closed behavior across missing, rejected, altered, replayed, stale, self-approved, partially approved, and unauthorized approval states.
 
 ## Next Milestone
 
-Introduce dual approval for the highest-impact actions so execution requires two distinct authorized reviewers, then attack that control with duplicate-reviewer, partial-approval, replay, and mixed-authority scenarios before moving to broader enterprise policy integration.
+Move approval requirements out of hard-coded gateway conditions into a centralized policy classification model so the policy layer can determine whether an action is READ_ONLY, SENSITIVE, or CRITICAL and the gateway can enforce the corresponding authorization workflow consistently. This prepares the project for a later transition to an external policy engine such as OPA/Rego.
