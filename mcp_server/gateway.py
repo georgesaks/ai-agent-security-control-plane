@@ -1,8 +1,8 @@
 """Security gateway for MCP tool requests.
 
 The gateway is the enforcement point. It receives identity and environment
-context, asks the policy layer for a decision, records audit evidence, and
-only then dispatches to an approved MCP tool implementation.
+context, checks containment state, asks the policy layer for a decision,
+records audit evidence, and only then dispatches to an approved MCP tool.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
 from policy.engine import PolicyContext, evaluate
+from response.containment import get_containment, is_quarantined
 from telemetry.audit import build_audit_event
 
 
@@ -38,6 +39,23 @@ def dispatch_tool(
     tool_registry: Dict[str, ToolHandler],
 ) -> GatewayResult:
     """Authorize and dispatch an MCP tool request using default-deny behavior."""
+    if is_quarantined(context.actor):
+        containment = get_containment(context.actor)
+        reason = (
+            "agent is quarantined; all tool access is blocked"
+            if containment is None
+            else f"agent is quarantined: {containment.reason}"
+        )
+        event = build_audit_event(
+            actor=context.actor,
+            role=context.role,
+            environment=context.environment,
+            tool_name=tool_name,
+            decision="DENY",
+            reason=reason,
+        )
+        return GatewayResult(False, reason, event.to_json())
+
     if tool_name not in tool_registry:
         reason = "requested MCP tool is not registered with the security gateway"
         event = build_audit_event(
