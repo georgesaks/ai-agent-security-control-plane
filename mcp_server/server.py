@@ -1,11 +1,10 @@
-"""Policy-enforced MCP server for Phase 2.
+"""Identity-aware, policy-enforced MCP server for Phase 2."""
 
-The MCP protocol exposes the tools, but the gateway remains responsible for
-security decisions. Tool implementations are local and intentionally low risk.
-"""
+import os
 
 from mcp.server.fastmcp import FastMCP
 
+from identity.agent_identity import IdentityError, verify_token
 from mcp_server.gateway import MCPRequestContext, dispatch_tool
 
 
@@ -35,17 +34,25 @@ TOOL_REGISTRY = {
 def _secured_call(
     tool_name: str,
     *,
-    actor: str,
-    role: str,
+    identity_token: str,
     environment: str,
     arguments: dict | None = None,
 ) -> str:
+    signing_secret = os.environ.get("AGENT_IDENTITY_SIGNING_SECRET")
+    if not signing_secret:
+        return "DENIED: identity verifier is not configured; failing closed"
+
+    try:
+        identity = verify_token(identity_token, signing_secret=signing_secret)
+    except IdentityError as exc:
+        return f"DENIED: untrusted agent identity ({exc})"
+
     result = dispatch_tool(
         tool_name=tool_name,
         arguments=arguments or {},
         context=MCPRequestContext(
-            actor=actor,
-            role=role,
+            actor=identity.actor,
+            role=identity.role,
             environment=environment,
         ),
         tool_registry=TOOL_REGISTRY,
@@ -57,15 +64,13 @@ def _secured_call(
 
 @mcp.tool()
 def read_repository_summary(
-    actor: str,
-    role: str,
+    identity_token: str,
     environment: str = "development",
 ) -> str:
-    """Read the approved repository summary through the security gateway."""
+    """Read the approved repository using verified agent identity claims."""
     return _secured_call(
         "read_repository_summary",
-        actor=actor,
-        role=role,
+        identity_token=identity_token,
         environment=environment,
     )
 
@@ -74,15 +79,13 @@ def read_repository_summary(
 def create_issue_draft(
     title: str,
     body: str,
-    actor: str,
-    role: str,
+    identity_token: str,
     environment: str = "development",
 ) -> str:
-    """Create a local issue draft only when policy authorizes the request."""
+    """Create a local issue draft using verified agent identity claims."""
     return _secured_call(
         "create_issue_draft",
-        actor=actor,
-        role=role,
+        identity_token=identity_token,
         environment=environment,
         arguments={"title": title, "body": body},
     )
