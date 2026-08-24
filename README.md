@@ -21,6 +21,7 @@ The project is being built incrementally. Each control is implemented, attacked,
 - Adapt authorization based on runtime behavioral risk
 - Require explicit human authorization for selected sensitive operations
 - Prevent approval reuse and bind authorization to the reviewed action
+- Expire stale approvals so authorization is time-bounded
 
 ## Architecture So Far
 
@@ -42,7 +43,9 @@ MCP Security Gateway
       +--> Human Approval Boundary
       |         |
       |         +--> APPROVE / REJECT
-      |         +--> Action-bound, single-use approval
+      |         +--> Action-bound approval
+      |         +--> Single-use consumption
+      |         +--> Time-bounded expiration
       |
       v
 Approved Tool Registry
@@ -129,7 +132,12 @@ Validated milestones:
 - Post-approval argument modification is detected and denied
 - Exact human-reviewed action remains valid after a failed tampering attempt
 - Consumed approval replay is denied
-- Regression suite increased to 35 passing automated security tests
+- Time-bounded approvals introduced with a default 300-second TTL
+- Fresh approval remains valid inside the approved time window
+- Approved but stale requests are denied after expiration
+- Expired approval retries remain denied
+- Pending approval requests cannot be approved after expiration
+- Regression suite increased to 39 passing automated security tests
 
 Validated approval flow:
 
@@ -148,14 +156,17 @@ Agent requests sensitive action
     REJECT      APPROVE
       |            |
      DENY          v
-              Execute exact
-             approved action
+              Exact action
+              + valid TTL
+                  |
+                  v
+                ALLOW
                   |
                   v
            Consume approval
                   |
-                  v
-          Replay attempt -> DENY
+                  +--> Replay -> DENY
+                  +--> Expired -> DENY
 ```
 
 Approval attack validation:
@@ -166,6 +177,10 @@ Human rejects                 -> DENY
 Approved action is modified   -> DENY
 Exact reviewed action         -> ALLOW
 Consumed approval is replayed -> DENY
+Fresh approval inside TTL     -> ALLOW
+Stale approval after TTL      -> DENY
+Expired approval retry        -> DENY
+Late human review             -> DENY
 ```
 
 ## Experiments and Evidence
@@ -189,6 +204,10 @@ Evidence captured so far includes:
 13. Approval bypass attack suite validates missing, rejected, modified, and replayed approval denial paths
 14. Exact reviewed action remains executable while modified arguments fail integrity validation
 15. Regression suite reaching 35 passing security tests after approval negative-path validation
+16. Time-bounded approval validation shows a fresh approval allowed at 60 seconds
+17. Stale approval denied after 301 seconds with an explicit expiration reason
+18. Expired approval retry and late human review both denied
+19. Regression suite reaching 39 passing security tests after approval-expiration controls
 
 Sensitive information such as API keys, signing secrets, payment information, and account identifiers is intentionally excluded from project evidence.
 
@@ -196,8 +215,8 @@ Sensitive information such as API keys, signing secrets, payment information, an
 
 A recurring design principle from the experiments so far is that model behavior alone is not a sufficient security boundary. Prompt-injection resistance is useful, but authorization, identity verification, telemetry, detection, containment, adaptive risk, and approval controls need to exist outside the model so that a manipulated or compromised agent cannot directly convert intent into privileged action.
 
-The approval experiments add another principle: human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action that was reviewed and consumed after execution. The negative-path tests demonstrate that the control fails closed when an approval is absent, rejected, altered, or replayed.
+The approval experiments add another principle: human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action that was reviewed, consumed after execution, and limited in time. The negative-path and expiration tests demonstrate that the control fails closed when an approval is absent, rejected, altered, replayed, or stale.
 
 ## Next Milestone
 
-Add time-bounded approvals and approval expiration so a previously approved sensitive action cannot remain executable indefinitely, then validate expiration and stale-approval denial paths before progressing to broader enterprise controls.
+Add stronger reviewer controls so sensitive actions can require an authorized reviewer identity and, for higher-impact operations, support separation of duties such as dual approval before execution.
