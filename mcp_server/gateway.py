@@ -1,7 +1,8 @@
 """Security gateway for MCP tool requests.
 
 The gateway is the enforcement point. It checks containment, adaptive risk,
-human approval requirements, and authorization policy before tool execution.
+human approval requirements, dual-control approval for critical actions, and
+authorization policy before tool execution.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
+from approval.dual_workflow import consume_dual_approval, create_dual_approval_request
 from approval.workflow import consume_approval, create_approval_request
 from policy.engine import PolicyContext, evaluate
 from response.containment import get_containment, is_quarantined, quarantine_actor
@@ -59,7 +61,7 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], context: MCPRequest
         quarantine_actor(context.actor, reason=f"adaptive risk score {risk.score} reached CRITICAL")
         return _result(tool_name, context, "DENY", f"adaptive risk CRITICAL ({risk.score}); agent quarantined")
 
-    if risk.level == "HIGH" and tool_name == "create_issue_draft":
+    if risk.level == "HIGH" and tool_name in {"create_issue_draft", "critical_configuration_change"}:
         return _result(tool_name, context, "DENY", f"adaptive risk HIGH ({risk.score}); write-oriented tool access restricted")
 
     if tool_name not in tool_registry:
@@ -69,6 +71,47 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], context: MCPRequest
     decision = evaluate(policy_context)
     if not decision.allowed:
         return _result(tool_name, context, "DENY", decision.reason)
+
+    # Highest-impact operations require four-eyes authorization. The gateway
+    # creates the request and refuses execution until two distinct authorized
+    # reviewers have approved the exact action.
+    if tool_name == "critical_configuration_change":
+        if context.approval_id is None:
+            approval = create_dual_approval_request(
+                actor=context.actor,
+                role=context.role,
+                environment=context.environment,
+                tool_name=tool_name,
+                arguments=arguments,
+            )
+            return _result(
+                tool_name,
+                context,
+                "REQUIRE_DUAL_APPROVAL",
+                f"two distinct authorized reviewers required; request_id={approval.request_id}",
+            )
+
+        approved, reason = consume_dual_approval(
+            context.approval_id,
+            actor=context.actor,
+            role=context.role,
+            environment=context.environment,
+            tool_name=tool_name,
+            arguments=arguments,
+        )
+        if not approved:
+            return _result(tool_name, context, "DENY", reason)
+
+        output = tool_registry[tool_name](**arguments)
+        event = build_audit_event(
+            actor=context.actor,
+            role=context.role,
+            environment=context.environment,
+            tool_name=tool_name,
+            decision="ALLOW",
+            reason=f"policy requirements satisfied; dual control {reason}",
+        )
+        return GatewayResult(True, output, event.to_json())
 
     # Development writes are permitted by role policy but are sensitive enough
     # to require explicit human authorization before execution.
