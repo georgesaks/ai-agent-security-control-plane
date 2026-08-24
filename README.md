@@ -123,7 +123,13 @@ Validated milestones:
 - Replay of the consumed approval denied
 - Audit telemetry records `REQUIRE_APPROVAL` and post-approval `ALLOW` decisions
 - Demonstration uses a local issue draft and performs no GitHub write
-- Regression suite increased to 31 passing automated security tests
+- Negative-path attack suite validates fail-closed approval behavior
+- Fabricated or nonexistent approval identifiers are denied
+- Explicitly rejected human approvals are denied
+- Post-approval argument modification is detected and denied
+- Exact human-reviewed action remains valid after a failed tampering attempt
+- Consumed approval replay is denied
+- Regression suite increased to 35 passing automated security tests
 
 Validated approval flow:
 
@@ -152,6 +158,16 @@ Agent requests sensitive action
           Replay attempt -> DENY
 ```
 
+Approval attack validation:
+
+```text
+No valid approval             -> DENY
+Human rejects                 -> DENY
+Approved action is modified   -> DENY
+Exact reviewed action         -> ALLOW
+Consumed approval is replayed -> DENY
+```
+
 ## Experiments and Evidence
 
 The project is being developed as an engineering case study, so successful controls and useful failures are both retained as evidence.
@@ -169,7 +185,10 @@ Evidence captured so far includes:
 9. Sensitive agent action intercepted with `REQUIRE_APPROVAL`
 10. Human reviewer approval allowing only the reviewed action
 11. Consumed approval replay attempt denied
-12. Regression suite reaching 31 passing security tests after approval controls
+12. Regression suite reaching 31 passing security tests after initial approval controls
+13. Approval bypass attack suite validates missing, rejected, modified, and replayed approval denial paths
+14. Exact reviewed action remains executable while modified arguments fail integrity validation
+15. Regression suite reaching 35 passing security tests after approval negative-path validation
 
 Sensitive information such as API keys, signing secrets, payment information, and account identifiers is intentionally excluded from project evidence.
 
@@ -177,8 +196,8 @@ Sensitive information such as API keys, signing secrets, payment information, an
 
 A recurring design principle from the experiments so far is that model behavior alone is not a sufficient security boundary. Prompt-injection resistance is useful, but authorization, identity verification, telemetry, detection, containment, adaptive risk, and approval controls need to exist outside the model so that a manipulated or compromised agent cannot directly convert intent into privileged action.
 
-The approval experiment adds another principle: human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action that was reviewed and consumed after execution to reduce confused-deputy and replay risk.
+The approval experiments add another principle: human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action that was reviewed and consumed after execution. The negative-path tests demonstrate that the control fails closed when an approval is absent, rejected, altered, or replayed.
 
 ## Next Milestone
 
-Strengthen the approval boundary with negative-path testing, including rejected approvals, modified-action attempts, and attempts to execute without an approval, before adding the next enterprise control.
+Add time-bounded approvals and approval expiration so a previously approved sensitive action cannot remain executable indefinitely, then validate expiration and stale-approval denial paths before progressing to broader enterprise controls.
