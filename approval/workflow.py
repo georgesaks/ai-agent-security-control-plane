@@ -3,7 +3,8 @@
 Approval records are intentionally in-memory for this prototype. A request is
 bound to the actor, tool, arguments, role, and environment that were reviewed,
 so an approval cannot be reused for a different action. Approved requests are
-also time-bounded and expire automatically.
+time-bounded, expire automatically, and must be reviewed by an authorized
+reviewer who is distinct from the requesting actor.
 """
 
 from __future__ import annotations
@@ -17,6 +18,11 @@ from typing import Any
 
 
 DEFAULT_APPROVAL_TTL_SECONDS = 300
+AUTHORIZED_REVIEWERS = {
+    "security-reviewer-saki",
+    "security-reviewer-primary",
+    "security-reviewer-secondary",
+}
 
 
 @dataclass
@@ -93,6 +99,12 @@ def review_approval(
         request.status = "EXPIRED"
         raise ValueError("approval request has expired")
 
+    if reviewer not in AUTHORIZED_REVIEWERS:
+        raise PermissionError("reviewer is not authorized to approve sensitive actions")
+
+    if reviewer == request.actor:
+        raise PermissionError("requesting actor cannot approve its own action")
+
     request.status = "APPROVED" if approve else "REJECTED"
     request.reviewed_by = reviewer
     request.reviewed_at = current.isoformat()
@@ -120,6 +132,12 @@ def consume_approval(
 
     if request.status != "APPROVED":
         return False, f"approval request is {request.status.lower()}"
+
+    if request.reviewed_by not in AUTHORIZED_REVIEWERS:
+        return False, "approval reviewer is no longer authorized"
+
+    if request.reviewed_by == request.actor:
+        return False, "separation of duties violation"
 
     if (
         request.actor != actor
