@@ -4,6 +4,14 @@
 
 **Status:** Core engineering complete · **85 automated security tests passing** · Integrated compromised-agent scenario: **PASS**
 
+## Engineering Case Study
+
+I documented the architecture, security decisions, adversarial testing strategy, and lessons learned from building this project in a detailed engineering case study:
+
+**[Securing Autonomous AI Agents: Building a Zero-Trust Control Plane with MCP, OPA/Rego, and Automated Containment](https://medium.com/@georgesaks03/securing-autonomous-ai-agents-building-a-zero-trust-control-plane-with-mcp-opa-rego-and-cf3d947da926)**
+
+The case study covers the compromised-agent threat model, MCP enforcement boundary, OPA/Rego authorization, human and four-eyes approval, adaptive behavioral risk, detection and correlation, automated quarantine, and the final integrated adversarial scenario.
+
 ## Why This Project Exists
 
 AI agents are increasingly able to interact with repositories, cloud infrastructure, APIs, data systems, and other enterprise tools. That creates a security problem that prompt engineering alone cannot solve:
