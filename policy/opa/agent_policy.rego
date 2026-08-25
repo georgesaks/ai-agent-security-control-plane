@@ -1,8 +1,8 @@
 package aiagent.authz
 
-# Initial OPA/Rego policy mirrors the current Python authorization model.
-# The gateway still uses Python policy for enforcement while Rego runs in
-# shadow/parity mode until behavior is validated.
+# OPA/Rego is the primary authorization decision source for the MCP gateway.
+# The policy returns both an allow/deny decision and the action classification
+# used by the gateway to select the appropriate runtime control.
 
 default decision := {
   "allowed": false,
