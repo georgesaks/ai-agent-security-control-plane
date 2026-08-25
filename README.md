@@ -234,16 +234,31 @@ The suite covers identity tampering, expired credentials, role escalation, unreg
 
 The public evidence package is intentionally curated rather than containing every development screenshot.
 
-| Evidence | Demonstrates |
-|---|---|
-| `S01-85-tests-passing.png` | Complete regression and adversarial suite |
-| `S02-opa-version.png` | Real OPA/Rego runtime used for validation |
-| `S03-opa-read-only-decision.png` | Rego authorizes and classifies `READ_ONLY` |
-| `S04-opa-sensitive-or-critical-classification.png` | Rego classifies a permitted action as `SENSITIVE` |
-| `S05-four-eyes-approval-milestone.png` | Dual-control, reviewer authorization, tamper and replay defense |
-| `S06-final-integrated-adversarial-pass.png` | End-to-end denial, detection, risk escalation, correlation and quarantine |
+### 85-Test Regression and Adversarial Suite
 
-Once the curated screenshots are committed under `evidence/`, they can be embedded directly here as visual proof.
+![85 automated security tests passing](evidence/S01-85-tests-passing.png)
+
+### OPA/Rego Runtime
+
+![OPA runtime and Rego version](evidence/S02-opa-version.png)
+
+### OPA READ_ONLY Authorization Decision
+
+![OPA READ_ONLY authorization decision](evidence/S03-opa-read-only-decision.png)
+
+### OPA SENSITIVE Classification
+
+![OPA SENSITIVE classification](evidence/S04-opa-sensitive-or-critical-classification.png)
+
+### Four-Eyes Approval and Bypass Defense
+
+![Four-eyes approval controls](evidence/S05-four-eyes-approval-milestone.png)
+
+### Final Integrated Adversarial Scenario
+
+![Final integrated compromised-agent adversarial scenario](evidence/S06-final-integrated-adversarial-pass.png)
+
+The final screenshot demonstrates the strongest end-to-end security story in the project: repeated compromised-agent production actions are denied, detections are generated, runtime risk escalates to CRITICAL, `AI-003` correlates the behavior, the actor is quarantined, and a normally allowed READ_ONLY operation is subsequently denied.
 
 See [`docs/evidence-catalog.md`](docs/evidence-catalog.md) for the complete evidence map.
 
