@@ -27,6 +27,8 @@ The project is being built incrementally. Each control is implemented, attacked,
 - Require two distinct authorized reviewers for highest-impact actions
 - Enforce four-eyes authorization at the MCP gateway before critical tool execution
 - Centralize action sensitivity classification in policy rather than hard-coding tool behavior in the gateway
+- Externalize authorization decisions into OPA/Rego policy-as-code
+- Fail closed when the external policy decision point is unavailable or invalid
 
 ## Architecture So Far
 
@@ -43,12 +45,13 @@ MCP Security Gateway
       |
       +--> Adaptive Risk
       |
-      +--> Authorization Policy
+      +--> OPA / Rego Authorization Policy
       |         |
       |         +--> READ_ONLY
       |         +--> SENSITIVE
       |         +--> CRITICAL
       |         +--> UNKNOWN -> DENY
+      |         +--> Policy failure -> DENY
       |
       +--> Human Approval Boundary
       |         |
@@ -75,7 +78,7 @@ Detection + Correlation
 Containment / Dynamic Access Revocation
 ```
 
-The model can request an action, but it does not make the final authorization decision. The policy layer classifies the action, and the security gateway applies the corresponding enforcement workflow.
+The model can request an action, but it does not make the final authorization decision. OPA/Rego evaluates authorization and classifies the action, while the MCP security gateway enforces the resulting runtime control.
 
 ## Project Status
 
@@ -94,7 +97,7 @@ Validated capabilities:
 
 ### Phase 2: Live agent security control plane — ACTIVE
 
-Connected a live LLM agent to the security boundary and began testing how the system behaves under normal and adversarial conditions.
+Connected a live LLM agent to the security boundary and tested how the system behaves under normal and adversarial conditions.
 
 Validated milestones:
 
@@ -128,69 +131,68 @@ Introduced human-in-the-loop authorization boundaries for sensitive and critical
 
 Validated milestones:
 
-- New `REQUIRE_APPROVAL` authorization outcome for sensitive actions
-- Sensitive `create_issue_draft` request held before tool execution
+- `REQUIRE_APPROVAL` authorization outcome for sensitive actions
+- Sensitive requests held before tool execution
 - Explicit human reviewer approval required before execution
 - Approval bound to actor, role, environment, tool, and exact action arguments
-- SHA-256 digest used to bind approval to the reviewed arguments
-- Approved action executed only after the gateway validates the approval
-- Approval consumed after successful use
-- Replay of the consumed approval denied
-- Audit telemetry records `REQUIRE_APPROVAL` and post-approval `ALLOW` decisions
-- Demonstration uses a local issue draft and performs no GitHub write
-- Negative-path attack suite validates fail-closed approval behavior
-- Fabricated or nonexistent approval identifiers are denied
-- Explicitly rejected human approvals are denied
-- Post-approval argument modification is detected and denied
-- Exact human-reviewed action remains valid after a failed tampering attempt
-- Consumed approval replay is denied
-- Time-bounded approvals introduced with a default 300-second TTL
-- Fresh approval remains valid inside the approved time window
-- Approved but stale requests are denied after expiration
-- Expired approval retries remain denied
-- Pending approval requests cannot be approved after expiration
+- SHA-256 digest binds approval to reviewed arguments
+- Approval consumed after successful use and replay denied
+- Time-bounded approvals with a default 300-second TTL
 - Sensitive approvals restricted to an explicit authorized-reviewer set
-- Unauthorized and fabricated reviewers are denied
-- Requesters cannot approve their own sensitive actions
-- Failed unauthorized review attempts do not destroy legitimate pending requests
-- Authorized security reviewer can approve and execute the exact reviewed action
-- Dual-control approval primitive introduced for highest-impact actions
-- One reviewer is insufficient for critical action execution
+- Separation of duties prevents requester self-approval
+- Dual-control approval for highest-impact actions
+- One reviewer is insufficient for critical execution
 - Same reviewer cannot satisfy both approval slots
-- Unauthorized second reviewer is denied
-- Requester cannot participate as a reviewer for its own critical action
-- Critical approval remains bound to the exact action and is time-bounded and single-use
-- Two distinct authorized reviewers successfully satisfy four-eyes authorization
-- `critical_configuration_change` classified as an authorized developer capability subject to critical controls
-- MCP gateway returns `REQUIRE_DUAL_APPROVAL` before critical execution
-- MCP gateway denies critical execution after only one approval
-- MCP gateway executes the exact critical action only after two distinct authorized approvals
-- MCP gateway denies post-approval argument tampering
-- MCP gateway denies replay after successful critical execution
-- Centralized policy classification introduced with `READ_ONLY`, `SENSITIVE`, `CRITICAL`, and `UNKNOWN`
-- `read_repository_summary` classified as `READ_ONLY`
-- `create_issue_draft` classified as `SENSITIVE`
-- `critical_configuration_change` classified as `CRITICAL`
-- Unclassified actions resolve to `UNKNOWN` and fail closed
-- Policy decisions now carry action sensitivity metadata to the gateway
-- Approval workflow selection is now driven by policy classification rather than hard-coded tool names
-- HIGH adaptive risk restriction now applies generically to all `SENSITIVE` and `CRITICAL` actions
-- Production policy denies both `SENSITIVE` and `CRITICAL` actions in this prototype
-- Regression suite increased to 64 passing automated security tests
+- Two distinct authorized reviewers satisfy four-eyes authorization
+- Critical approval remains action-bound, time-bounded, and single-use
+- Gateway denies post-approval argument tampering and execution replay
+- Centralized policy classification with `READ_ONLY`, `SENSITIVE`, `CRITICAL`, and `UNKNOWN`
+- Approval workflow selection driven by policy classification rather than hard-coded tool names
+- HIGH adaptive risk restriction applies generically to `SENSITIVE` and `CRITICAL` actions
+- Production policy denies `SENSITIVE` and `CRITICAL` actions in this prototype
+- Regression suite reached 64 passing automated security tests
+
+### Phase 4: OPA/Rego policy-as-code — COMPLETE
+
+Externalized the authorization decision point from the Python policy implementation into Open Policy Agent using Rego.
+
+Validated milestones:
+
+- Rego policy created for role permissions, environment restrictions, and action classification
+- Manual OPA evaluations validated `READ_ONLY`, `SENSITIVE`, and `CRITICAL` decisions
+- Python and Rego engines executed in shadow/parity mode before migration
+- Eight automated parity scenarios validated matching allow/deny, classification, and reason behavior
+- Regression suite reached 72 passing tests during policy parity validation
+- Fail-closed OPA adapter introduced between the gateway and policy decision point
+- Missing OPA executable produces DENY rather than permissive fallback
+- Invalid or broken Rego policy produces DENY
+- Malformed or invalid OPA response produces DENY
+- Regression suite reached 78 passing tests before enforcement migration
+- MCP gateway migrated from embedded Python authorization to OPA/Rego decisions
+- Existing 78-test security suite remained green after OPA became the enforcement decision source
+- Dedicated OPA enforcement-boundary attack suite added
+- Unknown role escalation denied by OPA at the gateway
+- Auditor-to-sensitive privilege escalation denied
+- Production sensitive and critical actions denied before approval workflows are created
+- Unregistered attacker-supplied tools denied before policy evaluation
+- Simulated OPA unavailability prevents tool execution
+- Invalid policy decision prevents tool execution
+- Audit telemetry records fail-closed gateway denials
+- Regression and adversarial suite reached 85 passing automated security tests
 
 ## Policy-Driven Enforcement
 
-The gateway no longer decides approval level from specific tool names. Instead, the policy layer returns a sensitivity classification and the gateway applies the matching control.
+The gateway no longer decides approval level from specific tool names and no longer owns the primary authorization policy. OPA/Rego returns both authorization and sensitivity classification, and the gateway applies the matching runtime control.
 
 ```text
-Policy classification
+OPA / Rego decision
         |
-        +--> READ_ONLY
+        +--> READ_ONLY + ALLOW
         |       |
         |       v
-        |    Normal authorization
+        |    Normal execution
         |
-        +--> SENSITIVE
+        +--> SENSITIVE + ALLOW
         |       |
         |       v
         |    REQUIRE_APPROVAL
@@ -198,7 +200,7 @@ Policy classification
         |       v
         |    One authorized independent reviewer
         |
-        +--> CRITICAL
+        +--> CRITICAL + ALLOW
         |       |
         |       v
         |    REQUIRE_DUAL_APPROVAL
@@ -206,13 +208,13 @@ Policy classification
         |       v
         |    Two distinct authorized independent reviewers
         |
-        +--> UNKNOWN
+        +--> DENY / UNKNOWN / POLICY FAILURE
                 |
                 v
               DENY
 ```
 
-This separates security policy from enforcement mechanics and provides a cleaner path to policy-as-code.
+This separates the policy decision point from the policy enforcement point. Rego owns the authorization policy, while the MCP gateway owns enforcement, approval orchestration, adaptive-risk restrictions, tool dispatch, and audit generation.
 
 ## Approval Attack Validation
 
@@ -238,6 +240,19 @@ Two authorized critical reviewers  -> ALLOW
 Critical execution replay          -> DENY
 ```
 
+## OPA Enforcement Attack Validation
+
+```text
+Unknown role                       -> DENY
+Auditor requests sensitive action  -> DENY
+Sensitive production action        -> DENY before approval
+Critical production action         -> DENY before dual approval
+Unregistered tool                  -> DENY before policy evaluation
+OPA unavailable                    -> DENY; handler unreachable
+Invalid OPA decision               -> DENY; handler unreachable
+Broken policy                      -> DENY
+```
+
 ## Experiments and Evidence
 
 The project is being developed as an engineering case study, so successful controls and useful failures are both retained as evidence.
@@ -251,44 +266,32 @@ Evidence captured so far includes:
 5. Repeated malicious behavior correlated into a critical detection
 6. Automated quarantine with post-containment access denial
 7. Adaptive risk progression causing dynamic restriction and quarantine
-8. Regression suite reaching 28 passing security tests at the adaptive-risk milestone
-9. Sensitive agent action intercepted with `REQUIRE_APPROVAL`
-10. Human reviewer approval allowing only the reviewed action
-11. Consumed approval replay attempt denied
-12. Regression suite reaching 31 passing security tests after initial approval controls
-13. Approval bypass attack suite validates missing, rejected, modified, and replayed approval denial paths
-14. Exact reviewed action remains executable while modified arguments fail integrity validation
-15. Regression suite reaching 35 passing security tests after approval negative-path validation
-16. Time-bounded approval validation shows a fresh approval allowed at 60 seconds
-17. Stale approval denied after 301 seconds with an explicit expiration reason
-18. Expired approval retry and late human review both denied
-19. Regression suite reaching 39 passing security tests after approval-expiration controls
-20. Reviewer authorization attack suite blocks unauthorized and fabricated reviewers
-21. Separation-of-duties test blocks requester self-approval
-22. Authorized security reviewer successfully approves the reviewed action
-23. Regression suite reaches 44 passing security tests after reviewer-authorization controls
-24. Dual-approval attack suite validates one-reviewer, duplicate-reviewer, unauthorized-reviewer, tampering, and replay denial paths
-25. Two distinct authorized reviewers satisfy the isolated four-eyes approval primitive
-26. Regression suite reaches 52 passing tests after dual-approval primitive validation
-27. Critical action integrated into the real MCP security gateway with `REQUIRE_DUAL_APPROVAL`
-28. Gateway blocks execution with only one reviewer and after action tampering
-29. Gateway executes only after two distinct authorized reviewers and consumes the authorization
-30. Regression suite reaches 57 passing tests after four-eyes gateway integration
-31. Central policy classification validated for READ_ONLY, SENSITIVE, CRITICAL, and UNKNOWN actions
-32. Gateway approval selection refactored to consume policy classification rather than specific tool names
-33. Adaptive risk enforcement generalized to policy sensitivity classes
-34. Regression suite reaches 64 passing tests after policy-classification integration
+8. Sensitive agent action intercepted with `REQUIRE_APPROVAL`
+9. Human reviewer approval allowing only the reviewed action
+10. Consumed approval replay attempt denied
+11. Approval bypass attack suite validates missing, rejected, modified, and replayed approval denial paths
+12. Time-bounded approval validation denies stale authorization
+13. Reviewer authorization attack suite blocks unauthorized and fabricated reviewers
+14. Separation-of-duties test blocks requester self-approval
+15. Dual-approval attack suite validates one-reviewer, duplicate-reviewer, unauthorized-reviewer, tampering, and replay denial paths
+16. Two distinct authorized reviewers satisfy four-eyes authorization
+17. Central policy classification validated for READ_ONLY, SENSITIVE, CRITICAL, and UNKNOWN actions
+18. Python/Rego shadow-mode parity validated before enforcement migration
+19. OPA adapter validated to fail closed on policy-engine failure
+20. MCP gateway successfully migrated to OPA/Rego authorization without regression
+21. OPA enforcement boundary attacked for role escalation, production escalation, unregistered tools, policy unavailability, and invalid decisions
+22. Regression and adversarial suite reaches 85 passing automated security tests
 
 Sensitive information such as API keys, signing secrets, payment information, and account identifiers is intentionally excluded from project evidence.
 
 ## Current Learning
 
-A recurring design principle from the experiments so far is that model behavior alone is not a sufficient security boundary. Prompt-injection resistance is useful, but authorization, identity verification, telemetry, detection, containment, adaptive risk, and approval controls need to exist outside the model so that a manipulated or compromised agent cannot directly convert intent into privileged action.
+A recurring design principle from the experiments is that model behavior alone is not a sufficient security boundary. Prompt-injection resistance is useful, but authorization, identity verification, telemetry, detection, containment, adaptive risk, and approval controls need to exist outside the model so that a manipulated or compromised agent cannot directly convert intent into privileged action.
 
-The approval experiments add another principle: human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action that was reviewed, consumed after execution, limited in time, and granted only by authorized reviewers who are independent of the requester. For critical operations, the gateway requires two distinct authorized reviewers before the tool handler is reachable.
+The approval experiments show that human approval should not be treated as a reusable boolean. Authorization needs to be bound to the exact action reviewed, consumed after execution, limited in time, and granted only by authorized reviewers independent of the requester. Critical operations require two distinct authorized reviewers before the tool handler is reachable.
 
-The policy-classification milestone adds a further architectural lesson: the gateway should enforce security decisions, but it should not own the business logic that decides how sensitive each action is. Centralizing classification makes the gateway simpler, makes new tools easier to govern consistently, and prepares the design for an external policy engine.
+The OPA migration adds another architectural lesson: externalizing policy only improves the security boundary if policy-engine failure is handled safely. The gateway therefore treats unavailable, broken, or invalid policy evaluation as a denial and keeps the protected tool handler unreachable.
 
 ## Next Milestone
 
-Introduce OPA/Rego policy-as-code alongside the current Python policy model. Start by expressing action classification and role/environment authorization in Rego, validate policy parity with the existing 64-test behavior, and only then switch gateway decisions to the external policy engine. The migration will be incremental so the current working control plane remains verifiable throughout the transition.
+Run a final integrated adversarial scenario that exercises the complete control plane as one security story: compromised agent behavior, OPA authorization, policy classification, approval boundaries, tampering resistance, telemetry, detection correlation, adaptive risk escalation, containment, and post-quarantine access denial. After that scenario is validated, finalize architecture diagrams, threat-model documentation, evidence, and portfolio presentation rather than expanding the core scope further.
