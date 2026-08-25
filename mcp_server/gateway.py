@@ -1,9 +1,9 @@
 """Security gateway for MCP tool requests.
 
-The gateway is the enforcement point. Policy decides whether a request is
+The gateway is the enforcement point. OPA/Rego now decides whether a request is
 allowed and classifies the action as READ_ONLY, SENSITIVE, or CRITICAL. The
-gateway then applies the corresponding runtime control without hard-coding
-individual tool names into the approval workflow.
+gateway applies the corresponding runtime control without hard-coding
+individual tool names into the approval workflow. OPA failures fail closed.
 """
 
 from __future__ import annotations
@@ -13,7 +13,8 @@ from typing import Any, Callable, Dict
 
 from approval.dual_workflow import consume_dual_approval, create_dual_approval_request
 from approval.workflow import consume_approval, create_approval_request
-from policy.engine import CRITICAL, SENSITIVE, PolicyContext, evaluate
+from policy.engine import CRITICAL, SENSITIVE, PolicyContext
+from policy.opa_engine import evaluate_opa
 from response.containment import get_containment, is_quarantined, quarantine_actor
 from risk.adaptive_risk import get_risk
 from telemetry.audit import build_audit_event
@@ -66,11 +67,10 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], context: MCPRequest
         return _result(tool_name, context, "DENY", "requested MCP tool is not registered with the security gateway")
 
     policy_context = PolicyContext(context.actor, context.role, context.environment, tool_name)
-    decision = evaluate(policy_context)
+    decision = evaluate_opa(policy_context)
     if not decision.allowed:
         return _result(tool_name, context, "DENY", decision.reason)
 
-    # Adaptive risk now acts on policy sensitivity instead of a list of tool names.
     if risk.level == "HIGH" and decision.action_classification in {SENSITIVE, CRITICAL}:
         return _result(tool_name, context, "DENY", f"adaptive risk HIGH ({risk.score}); {decision.action_classification.lower()} tool access restricted")
 
@@ -108,7 +108,7 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], context: MCPRequest
             environment=context.environment,
             tool_name=tool_name,
             decision="ALLOW",
-            reason=f"policy class CRITICAL; dual control {reason}",
+            reason=f"OPA policy class CRITICAL; dual control {reason}",
         )
         return GatewayResult(True, output, event.to_json())
 
@@ -146,7 +146,7 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], context: MCPRequest
             environment=context.environment,
             tool_name=tool_name,
             decision="ALLOW",
-            reason=f"policy class SENSITIVE; human {reason}",
+            reason=f"OPA policy class SENSITIVE; human {reason}",
         )
         return GatewayResult(True, output, event.to_json())
 
@@ -156,7 +156,7 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], context: MCPRequest
         environment=context.environment,
         tool_name=tool_name,
         decision="ALLOW",
-        reason=f"{decision.reason}; policy class {decision.action_classification}",
+        reason=f"{decision.reason}; OPA policy class {decision.action_classification}",
     )
     output = tool_registry[tool_name](**arguments)
     return GatewayResult(True, output, event.to_json())
