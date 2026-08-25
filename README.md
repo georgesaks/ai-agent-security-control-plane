@@ -75,6 +75,9 @@ Structured Audit Telemetry
 Detection + Correlation
       |
       v
+Adaptive Risk Escalation
+      |
+      v
 Containment / Dynamic Access Revocation
 ```
 
@@ -95,7 +98,7 @@ Validated capabilities:
 - Structured audit events for ALLOW and DENY decisions
 - Initial automated security tests
 
-### Phase 2: Live agent security control plane — ACTIVE
+### Phase 2: Live agent security control plane — COMPLETE
 
 Connected a live LLM agent to the security boundary and tested how the system behaves under normal and adversarial conditions.
 
@@ -125,7 +128,7 @@ Current control loop:
 Prevent -> Observe -> Detect -> Correlate -> Contain -> Adapt -> Audit
 ```
 
-### Phase 3: Human approval and stronger enterprise controls — ACTIVE
+### Phase 3: Human approval and stronger enterprise controls — COMPLETE
 
 Introduced human-in-the-loop authorization boundaries for sensitive and critical AI-agent operations that should not execute autonomously.
 
@@ -179,6 +182,62 @@ Validated milestones:
 - Invalid policy decision prevents tool execution
 - Audit telemetry records fail-closed gateway denials
 - Regression and adversarial suite reached 85 passing automated security tests
+
+### Phase 5: Integrated adversarial validation — COMPLETE
+
+Executed the complete security control plane as one adversarial scenario rather than as isolated controls.
+
+Validated sequence:
+
+- Assumed the AI agent was already compromised
+- Compromised developer agent attempted a `SENSITIVE` production action three times
+- OPA/Rego denied every production write before any human approval workflow could be created
+- Each denial generated structured audit telemetry
+- `AI-001` detected denied production activity
+- `AI-002` detected blocked write-oriented activity
+- Adaptive risk increased from 30/MEDIUM to 60/HIGH to 90/CRITICAL
+- Three denied actions correlated into `AI-003` with CRITICAL severity
+- Actor was moved to `QUARANTINED`
+- A normally authorized `READ_ONLY` development action was attempted after containment
+- Quarantine overrode the otherwise-valid OPA authorization path and denied access
+- Final demonstration completed with `FINAL RESULT: PASS`
+- Compromised model intent never became privileged tool execution
+
+Integrated attack path:
+
+```text
+Compromised AI Agent
+        |
+        v
+Production SENSITIVE request
+        |
+        v
+OPA / Rego -> DENY
+        |
+        +--> No approval request created
+        |
+        v
+Structured Audit Event
+        |
+        v
+AI-001 + AI-002
+        |
+        v
+Adaptive Risk
+30 MEDIUM -> 60 HIGH -> 90 CRITICAL
+        |
+        v
+AI-003 Correlation
+        |
+        v
+QUARANTINE
+        |
+        v
+Normally allowed READ_ONLY request
+        |
+        v
+DENY because actor is quarantined
+```
 
 ## Policy-Driven Enforcement
 
@@ -281,6 +340,13 @@ Evidence captured so far includes:
 20. MCP gateway successfully migrated to OPA/Rego authorization without regression
 21. OPA enforcement boundary attacked for role escalation, production escalation, unregistered tools, policy unavailability, and invalid decisions
 22. Regression and adversarial suite reaches 85 passing automated security tests
+23. Final integrated scenario shows repeated compromised-agent production writes denied by OPA before approval creation
+24. Integrated telemetry generates AI-001 and AI-002 findings on each malicious write attempt
+25. Adaptive risk escalates 30/MEDIUM -> 60/HIGH -> 90/CRITICAL
+26. AI-003 correlates the repeated denials into a CRITICAL finding
+27. Actor transitions to QUARANTINED with an explainable containment reason
+28. Post-quarantine READ_ONLY access is denied despite otherwise-valid role and environment
+29. Final integrated adversarial scenario completes with `FINAL RESULT: PASS`
 
 Sensitive information such as API keys, signing secrets, payment information, and account identifiers is intentionally excluded from project evidence.
 
@@ -292,6 +358,8 @@ The approval experiments show that human approval should not be treated as a reu
 
 The OPA migration adds another architectural lesson: externalizing policy only improves the security boundary if policy-engine failure is handled safely. The gateway therefore treats unavailable, broken, or invalid policy evaluation as a denial and keeps the protected tool handler unreachable.
 
+The final integrated scenario reinforces the core design thesis of the project: a compromised model does not have to be trusted to recover or behave correctly when deterministic controls outside the model remain authoritative. Policy, telemetry, adaptive risk, correlation, and containment can interrupt the path from malicious intent to privileged execution.
+
 ## Next Milestone
 
-Run a final integrated adversarial scenario that exercises the complete control plane as one security story: compromised agent behavior, OPA authorization, policy classification, approval boundaries, tampering resistance, telemetry, detection correlation, adaptive risk escalation, containment, and post-quarantine access denial. After that scenario is validated, finalize architecture diagrams, threat-model documentation, evidence, and portfolio presentation rather than expanding the core scope further.
+Core engineering validation is complete. The next phase is packaging and evidence: finalize the architecture diagram, threat model, attack-path documentation, evidence catalog, screenshots, security design narrative, and portfolio presentation. Additional infrastructure integrations are considered future extensions rather than requirements for the core project.
