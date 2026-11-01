@@ -14,13 +14,10 @@ import json
 import secrets
 from typing import Any
 
+from approval.reviewers import is_authorized_reviewer
+
 
 DEFAULT_DUAL_APPROVAL_TTL_SECONDS = 300
-AUTHORIZED_REVIEWERS = {
-    "security-reviewer-saki",
-    "security-reviewer-primary",
-    "security-reviewer-secondary",
-}
 
 
 @dataclass
@@ -82,7 +79,7 @@ def approve_dual_request(request_id: str, *, reviewer: str,
     if current >= datetime.fromisoformat(request.expires_at):
         request.status = "EXPIRED"
         raise ValueError("dual approval request has expired")
-    if reviewer not in AUTHORIZED_REVIEWERS:
+    if not is_authorized_reviewer(reviewer):
         raise PermissionError("reviewer is not authorized for critical actions")
     if reviewer == request.actor:
         raise PermissionError("requesting actor cannot approve its own critical action")
@@ -110,7 +107,7 @@ def consume_dual_approval(
         return False, "two distinct authorized reviewers are required"
     if len(set(request.approved_by)) != 2:
         return False, "dual approval integrity check failed"
-    if any(reviewer not in AUTHORIZED_REVIEWERS for reviewer in request.approved_by):
+    if not all(is_authorized_reviewer(reviewer) for reviewer in request.approved_by):
         return False, "dual approval contains unauthorized reviewer"
     if actor in request.approved_by:
         return False, "separation of duties violation"
