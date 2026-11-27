@@ -360,3 +360,7 @@ This project demonstrates an architecture in which an autonomous agent can use e
 The model proposes intent. The control plane independently decides whether that intent may become action.
 
 > **A compromised model does not need to be trusted to recover when deterministic security controls outside the model remain authoritative.**
+
+## License
+
+[MIT](LICENSE) © 2026 Saki George
