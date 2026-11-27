@@ -2,7 +2,7 @@
 
 > **A defense-in-depth security control plane for autonomous AI agents that keeps identity, authorization, human approval, detection, adaptive risk, and containment outside the LLM.**
 
-**Status:** Core engineering complete · **85 automated security tests passing** · Integrated compromised-agent scenario: **PASS**
+**Status:** Core engineering complete · **90 automated security tests passing** · Integrated compromised-agent scenario: **PASS**
 
 ## Engineering Case Study
 
@@ -216,11 +216,11 @@ python -m unittest discover -s tests -v
 ```
 
 ```text
-Ran 85 tests
+Ran 90 tests
 OK
 ```
 
-The suite covers identity tampering, expired credentials, role escalation, unregistered tools, policy classification, OPA parity, OPA failure, sensitive and critical production escalation, approval bypass, approval tampering, expiration, replay, reviewer authorization, self-approval, four-eyes bypass attempts, adaptive risk, detection, correlation, quarantine, and post-containment denial.
+The suite covers identity tampering, expired credentials, role escalation, unregistered tools, policy classification, OPA parity, OPA failure, sensitive and critical production escalation, approval bypass, approval tampering, expiration, replay, reviewer authorization, the configurable reviewer registry, self-approval, four-eyes bypass attempts, adaptive risk, detection, correlation, quarantine, and post-containment denial.
 
 ### Test Progression
 
@@ -236,13 +236,14 @@ The suite covers identity tampering, expired credentials, role escalation, unreg
 | 64 | Centralized action classification |
 | 72 | Python ↔ OPA/Rego policy parity |
 | 78 | Fail-closed OPA adapter and enforcement migration |
-| **85** | **OPA enforcement-boundary adversarial validation** |
+| 85 | OPA enforcement-boundary adversarial validation |
+| **90** | **Shared, configurable reviewer registry** |
 
 ## Evidence
 
 The public evidence package is intentionally curated rather than containing every development screenshot.
 
-### 85-Test Regression and Adversarial Suite
+### Regression and Adversarial Suite (85-test milestone)
 
 ![85 automated security tests passing](evidence/S01-85-tests-passing.png)
 
